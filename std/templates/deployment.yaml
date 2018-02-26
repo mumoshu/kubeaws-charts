@@ -25,6 +25,12 @@ spec:
         prometheus.io/path: {{ .Values.scrape.endpoint.path }}
         prometheus.io/port: {{ default .Values.http.port .Values.scrape.endpoint.port }}
     spec:
+      # See https://twitter.com/tallclair/status/967164479485091840
+      {{ if .Values.serviceaccount -}}
+      serviceAccountName: {{ .Values.serviceaccount }}
+      {{ else -}}
+      automountServiceAccountToken: false
+      {{ end -}}
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
