@@ -1,0 +1,105 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "std.fullname" . }}
+  labels:
+    app: {{ template "std.name" . }}
+    chart: {{ template "std.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "std.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "std.name" . }}
+        release: {{ .Release.Name }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        prometheus.io/scrape: {{ .Values.scrape.enabled }}
+        prometheus.io/path: {{ .Values.scrape.endpoint.path }}
+        prometheus.io/port: {{ default .Values.http.port .Values.scrape.endpoint.port }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "std.name" . }}
+              topologyKey: failure-domain.beta.kubernetes.io/zone
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "std.name" . }}
+              topologyKey: kube-aws.coreos.com/autoscalinggroup
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "std.name" . }}
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            {{ if .Values.http.port -}}
+            - name: http
+              containerPort: {{ .Values.http.port }}
+              protocol: TCP
+            {{- end }}
+            {{ if .Values.grpc.port -}}
+            - name: grpc
+              containerPort: {{ .Values.grpc.port }}
+              protocol: TCP
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: {{ .Values.livenessProbe.port }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.readinessProbe.port }}
+          envFrom:
+          - configMapRef:
+              name: {{ template "std.fullname" . }}
+          - secretRef:
+              name: {{ template "std.fullname" . }}
+          volumeMounts:
+          - name: config-files
+            mountPath: /etc/config
+          - name: secret-files
+            mountPath: /etc/secret
+          volumes:
+          - name: config-files
+            configMap:
+              name: {{ template "std.fullname" . }}-files
+          - name: secret-files
+            secret:
+              name: {{ template "std.fullname" . }}-files
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}

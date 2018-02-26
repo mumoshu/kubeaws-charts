@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "std.fullname" . }}
+  labels:
+    app: {{ template "std.name" . }}
+    chart: {{ template "std.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    prometheus.io/scrape: {{ .Values.scrape.enabled }}
+    prometheus.io/path: {{ .Values.scrape.endpoint.path }}
+    prometheus.io/port: {{ default .Values.http.port .Values.scrape.endpoint.port }}  
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: {{ template "std.name" . }}
+    release: {{ .Release.Name }}
